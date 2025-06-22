@@ -1,0 +1,204 @@
+import random
+import matplotlib.pyplot as plt
+import networkx as nx
+from typing import List, Tuple, Dict
+from GeneticShortestPath import GeneticShortestPath
+
+class SimulatedAnnealingShortestPath:
+    def __init__(self, graph: Dict[int, List[Tuple[int, float]]], start_node: int, end_node: int,
+                 initial_temp: float = 1000, final_temp: float = 1, alpha: float = 0.95, max_steps: int = 1000):
+        """
+        Метод отжига для нахождения кратчайшего пути
+        Args:
+            graph: Граф в виде словаря {узел: [(сосед, вес), ...]}
+            start_node: Начальный узел
+            end_node: Конечный узел
+            initial_temp: Начальная температура
+            final_temp: Конечная температура
+            alpha: Коэффициент охлаждения
+            max_steps: Количество шагов на каждой температуре
+        """
+        self.graph = graph
+        self.start_node = start_node
+        self.end_node = end_node
+        self.initial_temp = initial_temp
+        self.final_temp = final_temp
+        self.alpha = alpha
+        self.max_steps = max_steps
+        self.nodes = list(graph.keys())
+        self.best_path = None
+        self.best_length = float('inf')
+        self.history = []
+
+    def random_path(self) -> List[int]:
+        path = [self.start_node]
+        current = self.start_node
+        steps = 0
+        while current != self.end_node and steps < len(self.nodes) * 2:
+            neighbors = [n for n, _ in self.graph.get(current, [])]
+            if not neighbors:
+                break
+            next_node = random.choice(neighbors)
+            if next_node not in path:
+                path.append(next_node)
+                current = next_node
+            else:
+                available = [n for n in self.nodes if n not in path]
+                if available:
+                    current = random.choice(available)
+                    path.append(current)
+                else:
+                    break
+            steps += 1
+        if path[-1] != self.end_node:
+            path.append(self.end_node)
+        return path
+
+    def path_length(self, path: List[int]) -> float:
+        if len(path) < 2:
+            return float('inf')
+        total = 0
+        for i in range(len(path) - 1):
+            current = path[i]
+            next_node = path[i + 1]
+            for neighbor, weight in self.graph.get(current, []):
+                if neighbor == next_node:
+                    total += weight
+                    break
+            else:
+                return float('inf')
+        return total
+
+    def neighbor(self, path: List[int]) -> List[int]:
+        # Случайно меняем, добавляем или удаляем узел (кроме начала и конца)
+        if len(path) <= 3:
+            return self.random_path()
+        new_path = path.copy()
+        op = random.choice(['swap', 'insert', 'remove'])
+        if op == 'swap' and len(new_path) > 3:
+            idx = random.randint(1, len(new_path) - 2)
+            available = [n for n in self.nodes if n not in new_path]
+            if available:
+                new_path[idx] = random.choice(available)
+        elif op == 'insert' and len(new_path) < len(self.nodes):
+            idx = random.randint(1, len(new_path) - 1)
+            available = [n for n in self.nodes if n not in new_path]
+            if available:
+                new_path.insert(idx, random.choice(available))
+        elif op == 'remove' and len(new_path) > 3:
+            idx = random.randint(1, len(new_path) - 2)
+            new_path.pop(idx)
+        if new_path[0] != self.start_node:
+            new_path[0] = self.start_node
+        if new_path[-1] != self.end_node:
+            new_path[-1] = self.end_node
+        return new_path
+
+    def anneal(self):
+        current_path = self.random_path()
+        current_length = self.path_length(current_path)
+        best_path = current_path.copy()
+        best_length = current_length
+        temp = self.initial_temp
+        self.history = [current_length]
+        while temp > self.final_temp:
+            for _ in range(self.max_steps):
+                candidate = self.neighbor(current_path)
+                candidate_length = self.path_length(candidate)
+                delta = candidate_length - current_length
+                if delta < 0 or random.random() < pow(2.718, -delta / temp):
+                    current_path = candidate
+                    current_length = candidate_length
+                    if current_length < best_length:
+                        best_path = current_path.copy()
+                        best_length = current_length
+            self.history.append(best_length)
+            temp *= self.alpha
+        self.best_path = best_path
+        self.best_length = best_length
+        return best_path, best_length
+
+    def plot_results(self):
+        plt.figure(figsize=(15, 5))
+        plt.subplot(1, 3, 1)
+        plt.plot(self.history)
+        plt.title('Сходимость (отжиг)')
+        plt.xlabel('Итерация')
+        plt.ylabel('Лучшая длина пути')
+        plt.grid(True)
+        plt.subplot(1, 3, 2)
+        G = nx.DiGraph()
+        for node, edges in self.graph.items():
+            for neighbor, weight in edges:
+                G.add_edge(node, neighbor, weight=weight)
+        pos = nx.spring_layout(G)
+        nx.draw(G, pos, with_labels=True, node_color='lightgreen', node_size=500, font_size=10, font_weight='bold')
+        if self.best_path:
+            path_edges = list(zip(self.best_path[:-1], self.best_path[1:]))
+            nx.draw_networkx_edges(G, pos, edgelist=path_edges, edge_color='orange', width=3, arrows=True)
+        plt.title('Граф с найденным путем (отжиг)')
+        plt.subplot(1, 3, 3)
+        plt.axis('off')
+        stats_text = f"""
+        Результаты (отжиг):\n\nНачальный узел: {self.start_node}\nКонечный узел: {self.end_node}\nЛучший путь: {self.best_path}\nДлина пути: {self.best_length:.2f}\n\nПараметры:\nT0: {self.initial_temp}\nTmin: {self.final_temp}\nAlpha: {self.alpha}\nШагов: {self.max_steps}
+        """
+        plt.text(0.1, 0.5, stats_text, fontsize=12, verticalalignment='center')
+        plt.title('Статистика')
+        plt.tight_layout()
+        plt.show()
+
+def example_graph():
+    return {
+        0: [(1, 2), (2, 4)],
+        1: [(2, 1), (3, 7)],
+        2: [(3, 3)],
+        3: [(4, 1)],
+        4: []
+    }
+
+def random_graph(num_nodes: int = 8, edge_prob: float = 0.4, min_weight: int = 1, max_weight: int = 10) -> Dict[int, List[Tuple[int, float]]]:
+    """
+    Генерирует случайный ориентированный граф с весами.
+    """
+    graph = {i: [] for i in range(num_nodes)}
+    for i in range(num_nodes):
+        for j in range(num_nodes):
+            if i != j and random.random() < edge_prob:
+                weight = random.randint(min_weight, max_weight)
+                graph[i].append((j, weight))
+    return graph
+
+def compare_algorithms(graph=None, start=None, end=None):
+    if graph is None:
+        graph = example_graph()
+        start, end = 0, 4
+    if start is None or end is None:
+        nodes = list(graph.keys())
+        start, end = nodes[0], nodes[-1]
+    # Генетический алгоритм
+    ga = GeneticShortestPath(graph, start, end, population_size=50, generations=100)
+    ga_path, ga_len = ga.evolve()
+    # Метод отжига
+    sa = SimulatedAnnealingShortestPath(graph, start, end, initial_temp=1000, final_temp=1, alpha=0.95, max_steps=100)
+    sa_path, sa_len = sa.anneal()
+    print('Генетический алгоритм: путь', ga_path, 'длина', ga_len)
+    print('Метод отжига: путь', sa_path, 'длина', sa_len)
+    # Визуализация
+    ga.plot_results()
+    sa.plot_results()
+
+if __name__ == "__main__":
+    print("Выберите режим:")
+    print("1 - Пример из readme (маленький граф)")
+    print("2 - Случайный граф")
+    mode = input("Введите 1 или 2: ").strip()
+    if mode == '2':
+        n = input("Число вершин (по умолчанию 8): ").strip()
+        n = int(n) if n.isdigit() and int(n) > 2 else 8
+        graph = random_graph(num_nodes=n)
+        print(f"Случайный граф с {n} вершинами сгенерирован.")
+        for node, edges in graph.items():
+            print(node, edges)
+        compare_algorithms(graph, 0, n-1)
+    else:
+        compare_algorithms()
