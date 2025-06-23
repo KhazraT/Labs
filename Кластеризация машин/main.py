@@ -33,7 +33,7 @@ plt.title('Метод локтя для выбора числа кластеро
 plt.grid(True)
 plt.show()
 
-# Кластеризация (например, на 16 кластеров)
+# Кластеризация (например, на 4 кластера)
 n_clusters = 4
 kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
 clusters = kmeans.fit_predict(X_scaled)
