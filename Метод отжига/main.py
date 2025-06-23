@@ -30,29 +30,38 @@ class SimulatedAnnealingShortestPath:
         self.best_length = float('inf')
         self.history = []
 
-    def random_path(self) -> List[int]:
-        path = [self.start_node]
-        current = self.start_node
-        steps = 0
-        while current != self.end_node and steps < len(self.nodes) * 2:
-            neighbors = [n for n, _ in self.graph.get(current, [])]
-            if not neighbors:
-                break
-            next_node = random.choice(neighbors)
-            if next_node not in path:
+    def is_reachable(self) -> bool:
+        # Проверка достижимости end_node из start_node (BFS)
+        from collections import deque
+        visited = set()
+        queue = deque([self.start_node])
+        while queue:
+            node = queue.popleft()
+            if node == self.end_node:
+                return True
+            for neighbor, _ in self.graph.get(node, []):
+                if neighbor not in visited:
+                    visited.add(neighbor)
+                    queue.append(neighbor)
+        return False
+
+    def random_path(self, max_attempts: int = 100) -> List[int]:
+        # Генерируем случайный допустимый путь от start_node до end_node, не более max_attempts попыток
+        for _ in range(max_attempts):
+            path = [self.start_node]
+            current = self.start_node
+            visited = set(path)
+            while current != self.end_node:
+                neighbors = [n for n, _ in self.graph.get(current, []) if n not in visited or n == self.end_node]
+                if not neighbors:
+                    break  # не удалось построить путь
+                next_node = random.choice(neighbors)
                 path.append(next_node)
+                visited.add(next_node)
                 current = next_node
-            else:
-                available = [n for n in self.nodes if n not in path]
-                if available:
-                    current = random.choice(available)
-                    path.append(current)
-                else:
-                    break
-            steps += 1
-        if path[-1] != self.end_node:
-            path.append(self.end_node)
-        return path
+            if current == self.end_node:
+                return path
+        raise RuntimeError(f"Не удалось построить допустимый путь из {self.start_node} в {self.end_node} за {max_attempts} попыток. Возможно, путь не существует.")
 
     def path_length(self, path: List[int]) -> float:
         if len(path) < 2:
@@ -70,31 +79,29 @@ class SimulatedAnnealingShortestPath:
         return total
 
     def neighbor(self, path: List[int]) -> List[int]:
-        # Случайно меняем, добавляем или удаляем узел (кроме начала и конца)
-        if len(path) <= 3:
+        # Создаем соседа, изменяя один шаг пути, но оставляя путь допустимым
+        if len(path) <= 2:
             return self.random_path()
-        new_path = path.copy()
-        op = random.choice(['swap', 'insert', 'remove'])
-        if op == 'swap' and len(new_path) > 3:
-            idx = random.randint(1, len(new_path) - 2)
-            available = [n for n in self.nodes if n not in new_path]
-            if available:
-                new_path[idx] = random.choice(available)
-        elif op == 'insert' and len(new_path) < len(self.nodes):
-            idx = random.randint(1, len(new_path) - 1)
-            available = [n for n in self.nodes if n not in new_path]
-            if available:
-                new_path.insert(idx, random.choice(available))
-        elif op == 'remove' and len(new_path) > 3:
-            idx = random.randint(1, len(new_path) - 2)
-            new_path.pop(idx)
-        if new_path[0] != self.start_node:
-            new_path[0] = self.start_node
-        if new_path[-1] != self.end_node:
-            new_path[-1] = self.end_node
+        # Выбираем случайную позицию для изменения (не start и не end)
+        idx = random.randint(0, len(path) - 2 - 1) + 1  # от 1 до len(path)-2
+        # Строим новый путь до idx, затем случайно продолжаем до конца
+        new_path = path[:idx]
+        current = new_path[-1]
+        visited = set(new_path)
+        while current != self.end_node:
+            neighbors = [n for n, _ in self.graph.get(current, []) if n not in visited or n == self.end_node]
+            if not neighbors:
+                # Если некуда идти, возвращаем случайный путь
+                return self.random_path()
+            next_node = random.choice(neighbors)
+            new_path.append(next_node)
+            visited.add(next_node)
+            current = next_node
         return new_path
 
     def anneal(self):
+        if not self.is_reachable():
+            raise RuntimeError(f"Нет пути из {self.start_node} в {self.end_node} — алгоритм отжига невозможен.")
         current_path = self.random_path()
         current_length = self.path_length(current_path)
         best_path = current_path.copy()
@@ -189,7 +196,7 @@ def compare_algorithms(graph=None, start=None, end=None):
 
 if __name__ == "__main__":
     print("Выберите режим:")
-    print("1 - Пример из readme (маленький граф)")
+    print("1 - Заранее определенный маленький граф")
     print("2 - Случайный граф")
     mode = input("Введите 1 или 2: ").strip()
     if mode == '2':
