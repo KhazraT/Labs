@@ -208,4 +208,13 @@ def run_all_examples():
     test_comparison_with_dijkstra()
 
 if __name__ == "__main__":
+    seed = input("Введите seed: ")
+    if seed:
+        try:
+            seed = int(seed)
+        except:
+            seed = 42
+    else:
+        seed = 42
+    random.seed(seed)
     run_all_examples() 

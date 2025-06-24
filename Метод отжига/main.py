@@ -195,6 +195,15 @@ def compare_algorithms(graph=None, start=None, end=None):
     sa.plot_results()
 
 if __name__ == "__main__":
+    seed = input("Введите seed: ")
+    if seed:
+        try:
+            seed = int(seed)
+        except:
+            seed = 42
+    else:
+        seed = 42
+    random.seed(seed)
     print("Выберите режим:")
     print("1 - Заранее определенный маленький граф")
     print("2 - Случайный граф")
